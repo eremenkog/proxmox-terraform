@@ -6,7 +6,7 @@ distribs_versions["Ubuntu"]="20.04 LTS (Focal Fossa),22.04 LTS (Jammy Jellyfish)
 distribs_versions["Fedora"]="Fedora 37,Fedora 38"
 distribs_versions["Rocky Linux"]="Rocky 8 latest,Rocky 9 latest"
 distribs_versions["Alpine Linux"]="Alpine 3.19.1"
-distribs_versions["CentOS"]="CentOS 7, CentOS 8"
+distribs_versions["CentOS"]="CentOS 7,CentOS 8,CentOS 9"
 
 function list_array() {
   arr=("$@")
@@ -36,7 +36,7 @@ function create_template() {
     read vm_id
     
     echo "Select distribution:"
-    distros=("${!distribs_versions[@]}")  # Получаем массив ключей ассоциативного массива
+    distros=("${!distribs_versions[@]}")
     list_array "${distros[@]}"
     read choice_distr
     selected_distr="${distros[$choice_distr]}"
@@ -65,6 +65,7 @@ function create_template() {
         "Alpine 3.19.1") disk=$(download_image "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/cloud/nocloud_alpine-3.19.1-x86_64-bios-cloudinit-r0.qcow2" "nocloud_alpine-3.19.1-x86_64-bios-cloudinit-r0.qcow2");;
 		"CentOS 7") disk=$(download_image "https://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2c" "CentOS-7-x86_64-GenericCloud.qcow2c");;
 		"CentOS 8") disk=$(download_image "https://cloud.centos.org/centos/8/x86_64/images/CentOS-8-GenericCloud-8.4.2105-20210603.0.x86_64.qcow2" "CentOS-8-GenericCloud-8.4.2105-20210603.0.x86_64.qcow2");;
+		"CentOS 9") disk=$(download_image "https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-x86_64-9-20240729.0.x86_64.qcow2" "CentOS-Stream-GenericCloud-x86_64-9-20240729.0.x86_64.qcow2");;
         *) echo "$distr_ver not found"; exit;;
     esac
 
