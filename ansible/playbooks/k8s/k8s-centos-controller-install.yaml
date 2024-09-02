@@ -1,0 +1,162 @@
+---
+- hosts: k8s_ctrls
+  become: yes
+  tasks:
+
+    - name: Install Kernel Headers
+      dnf:
+        name: "kernel-devel-{{ ansible_kernel }}"
+        state: present
+
+    - name: Load Kernel Modules
+      command: modprobe "{{ item }}"
+      loop:
+        - br_netfilter
+        - ip_vs
+        - ip_vs_rr
+        - ip_vs_wrr
+        - ip_vs_sh
+        - overlay
+
+
+    - name: Add Kernel Modules to Load at Boot
+      copy:
+        dest: /etc/modules-load.d/kubernetes.conf
+        content: |
+          br_netfilter
+          ip_vs
+          ip_vs_rr
+          ip_vs_wrr
+          ip_vs_sh
+          overlay
+
+    - name: Configure Sysctl
+      copy:
+        dest: /etc/sysctl.d/kubernetes.conf
+        content: |
+          net.ipv4.ip_forward = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+
+    - name: Reload Sysctl
+      command: sysctl --system
+
+    - name: Disable Swap
+      command: swapoff -a
+
+    - name: Add Docker CE Repository
+      command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+    - name: Update Package Cache
+      dnf:
+        name: '*'
+        state: latest
+        update_cache: yes
+
+    - name: Install containerd
+      dnf:
+        name: containerd.io
+        state: present
+
+    - name: Configure Containerd
+      shell: |
+        containerd config default > /etc/containerd/config.toml
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+    - name: Enable and Start containerd Service
+      systemd:
+        name: containerd
+        enabled: yes
+        state: started
+
+    - name: Install firewalld
+      dnf:
+        name: firewalld
+        state: present
+
+
+    - name: Ensure firewalld is started and enabled
+      systemd:
+        name: firewalld
+        enabled: yes
+        state: started
+
+
+    - name: Set Firewall Rules
+      command: firewall-cmd --zone=public --permanent --add-port={{ item }}
+      loop:
+        - 6443/tcp
+        - 2379-2380/tcp
+        - 10250/tcp
+        - 10251/tcp
+        - 10252/tcp
+        - 10255/tcp
+        - 5473/tcp
+
+    - name: Reload Firewalld
+      command: firewall-cmd --reload
+
+
+    - name: Add Kubernetes Repository
+      copy:
+        dest: /etc/yum.repos.d/kubernetes.repo
+        content: |
+          [kubernetes]
+          name=Kubernetes
+          baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+          exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+
+    - name: Install Kubernetes Packages
+      dnf:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        disable_excludes: kubernetes
+
+    - name: Enable and Start kubelet Service
+      systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
+    - name: Pull Kubernetes Control Plane Images
+      command: kubeadm config images pull
+
+    - name: Initialize Kubernetes Control Plane
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16
+      register: kubeadm_init
+
+    - name: Display kubeadm init stdout
+      debug:
+        var: kubeadm_init.stdout
+
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0700'
+
+    - name: Display kubeadm init stdout
+      debug:
+        var: kubeadm_init.stdout
+
+    - name: Set Up kubeconfig File
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ ansible_env.HOME }}/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: 0600
+
+    - name: Deploy Calico Pod Network
+      shell: |
+        kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+        curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
+        sed -i 's/cidr: 192\.168\.0\.0\/16/cidr: 10.244.0.0\/16/g' custom-resources.yaml
+        kubectl create -f custom-resources.yaml

@@ -1,0 +1,26 @@
+---
+    - name: Generate kubeadm token and join workers to the Kubernetes cluster
+      hosts: k8s_ctrls
+      gather_facts: no
+      become: yes
+      tasks:
+        - name: Generate kubeadm token
+          shell: kubeadm token create --print-join-command
+          register: kubeadm_join_command
+          delegate_to: "{{ groups['k8s_ctrls'][0] }}"  # Run on the first control plane node only
+
+        - name: Save the kubeadm join command to a fact
+          set_fact:
+            kubeadm_join_command: "{{ kubeadm_join_command.stdout }}"
+
+        - name: Display kubeadm join command
+          debug:
+            var: kubeadm_join_command
+
+    - name: Join workers to the Kubernetes cluster
+      hosts: k8s_workers
+      gather_facts: no
+      tasks:
+        - name: Run kubeadm join on worker nodes
+          shell: "{{ hostvars[groups['k8s_ctrls'][0]].kubeadm_join_command }}"
+          become: yes
