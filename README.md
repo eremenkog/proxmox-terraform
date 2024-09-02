@@ -55,3 +55,45 @@ terraform plan
 terraform plan
 terraform apply
 ```
+
+# What's next?
+### Deploying k8s on CentOS with Ansible
+
+Provided terraform configuration will deploy the following VM:
+
+````
+name            IP                    
+ansible         192.168.192.158
+k8s-ctrl        192.168.192.159
+k8s-wrk-1       192.168.192.150
+k8s-wkr-2       192.168.192.151
+````
+
+## Steps:
+1. Install ansible using [`script`](https://github.com/eremenkog/proxmox-terraform/blob/main/ansible/configs/ansible_install.sh)
+```bash
+sudo su
+dnf -y install ansible-core 
+mv /etc/ansible/ansible.cfg /etc/ansible/ansible.cfg.org
+ansible-config init --disabled > /etc/ansible/ansible.cfg 
+
+sudo sed -i 's/;host_key_checking=True/host_key_checking=False/' /etc/ansible/ansible.cfg
+```
+2. Configure ansible hosts or use [provided one](https://github.com/eremenkog/proxmox-terraform/blob/main/ansible/configs/hosts)
+``` bash
+[k8s_ctrls]
+192.168.192.159		ansible_connection=ssh
+
+[k8s_workers]
+192.168.192.100		ansible_connection=ssh
+192.168.192.101		ansible_connection=ssh
+```
+3. Use provided playbook to setup control plane
+```bash
+ansible-playbook k8s-centos-controller-install.yaml
+```
+4. Setup worker nodes & join them to cluster
+```bash
+ansible-playbook k8s-centos-worker-install.yaml
+ansible-playbook k8s-centos-worker-join.yaml
+```
